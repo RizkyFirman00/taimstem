@@ -8,6 +8,6 @@ services:
     container_name: taimstem-web
     restart: always
     ports:
-      - "3001:3000"
+      - "3500:3000"
     environment:
       - NODE_ENV=production

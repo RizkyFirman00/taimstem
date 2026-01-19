@@ -132,7 +132,8 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const date = new Date(dateStr);
+    // Parsing happens later manually
+
     
     // 2. Prepare Overlay (Open Camera Style - Transparent)
     // Design: Map on left, Text on right. Transparent background. Strong text shadows.
@@ -151,9 +152,27 @@ export async function POST(req: NextRequest) {
         });
     };
 
+    // Manual Date Parsing to bypass Timezone execution environment issues entirely
+    // We expect dateStr to be in ISO-like format (e.g. 2023-11-25T14:30:00) sent from frontend
+    const parseDateRaw = (str: string) => {
+         const parts = str.split(/[^0-9]/).filter(Boolean);
+         return {
+             year: parts[0] || "2000",
+             month: parts[1] || "01",
+             day: parts[2] || "01",
+             hour: parts[3] || "00",
+             minute: parts[4] || "00",
+             second: parts[5] || "00"
+         };
+    };
+
+    const dRaw = parseDateRaw(dateStr);
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthName = months[parseInt(dRaw.month, 10) - 1] || "Jan";
+
     // Format Date/Time
-    const timeStr = date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    const dateStrShort = date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    const timeStr = `${dRaw.hour}:${dRaw.minute}:${dRaw.second}`;
+    const dateStrShort = `${parseInt(dRaw.day, 10)} ${monthName} ${dRaw.year}`;
     const dateTimeStr = escapeXml(`${dateStrShort} ${timeStr}`);
     
     // Coordinates

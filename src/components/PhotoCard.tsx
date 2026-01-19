@@ -93,13 +93,13 @@ export function PhotoCard({
             <Calendar size={14} className="text-slate-400 shrink-0" />
             <input
               type="date"
-              value={timestamp ? timestamp.toISOString().split('T')[0] : ''}
+              value={timestamp ? `${timestamp.getFullYear()}-${String(timestamp.getMonth() + 1).padStart(2, '0')}-${String(timestamp.getDate()).padStart(2, '0')}` : ''}
               className="bg-transparent text-xs text-slate-300 w-full focus:outline-none cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full"
               onChange={(e) => {
-                const val = e.target.valueAsDate;
-                if (val && timestamp) {
+                if (e.target.value && timestamp) {
+                   const [y, m, d] = e.target.value.split('-').map(Number);
                    const newDate = new Date(timestamp);
-                   newDate.setFullYear(val.getUTCFullYear(), val.getUTCMonth(), val.getUTCDate());
+                   newDate.setFullYear(y, m - 1, d);
                    onDateTimeChange(newDate);
                 }
               }}

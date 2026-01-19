@@ -98,7 +98,12 @@ export default function Home() {
     formData.append("lat", photo.location.lat.toString());
     formData.append("lng", photo.location.lng.toString());
     formData.append("address", photo.location.address);
-    formData.append("date", photo.timestamp.toISOString());
+    // Construct local ISO string manually to preserve local time values
+    const d = photo.timestamp;
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const localIso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    
+    formData.append("date", localIso);
 
     try {
       const res = await fetch("/api/process", {

@@ -9,50 +9,131 @@ export type LocationData = {
 export const DEFAULT_LOCATION: LocationData = {
   lat: -6.175256,
   lng: 106.821367,
-  address: "Monas, Jakarta, Indonesia",
-  city: "Jakarta",
+  address: "Monumen Nasional, Gambir, Jakarta Pusat, DKI Jakarta, Indonesia",
+  city: "Jakarta Pusat",
   country: "Indonesia",
+};
+
+const getApiKey = () => {
+  const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  if (!key) {
+    console.warn("GOOGLE_MAPS_API_KEY is not defined.");
+  }
+  return key || "";
+};
+
+// Helper to extract city and country from Google Geocoding address_components
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const parseAddressComponents = (components: any[]) => {
+  let city = "";
+  let country = "";
+
+  for (const component of components) {
+    const types = component.types;
+    if (
+      types.includes("locality") ||
+      types.includes("administrative_area_level_2")
+    ) {
+      city = component.long_name;
+    }
+    if (types.includes("country")) {
+      country = component.long_name;
+    }
+  }
+
+  return { city, country };
 };
 
 export async function searchLocation(query: string): Promise<LocationData[]> {
   try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-        query
-      )}&limit=10&addressdetails=1&countrycodes=id&dedupe=1`,
-      {
-        headers: {
-          "User-Agent": "TaimStem-App/1.0",
-        },
-      }
-    );
+    // Call our own Next.js backend API proxy instead of Google directly to avoid CORS
+    const response = await fetch(`/api/places?q=${encodeURIComponent(query)}`);
+
+    if (!response.ok) {
+      console.error("Internal API error:", response.statusText);
+      return [];
+    }
+
     const data = await response.json();
-    
+
+    if (data.error) {
+      console.error(
+        "Places API Proxy error:",
+        JSON.stringify(data.error, null, 2),
+      );
+      return [];
+    }
+
+    if (!data.places || data.places.length === 0) {
+      return [];
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return data.map((item: any) => ({
-      lat: parseFloat(item.lat),
-      lng: parseFloat(item.lon),
-      address: item.display_name,
-      city: item.address.city || item.address.town || item.address.village,
-      country: item.address.country,
-    }));
+    return data.places.slice(0, 5).map((place: any) => {
+      return {
+        lat: place.location.latitude,
+        lng: place.location.longitude,
+        address:
+          `${place.displayName?.text || ""}, ${place.formattedAddress || ""}`.replace(
+            /^,\s/,
+            "",
+          ),
+        city: "", // Not explicitly provided separately by default in v1
+        country: "Indonesia",
+      };
+    });
   } catch (error) {
     console.error("Error searching location:", error);
     return [];
   }
 }
-export async function getReverseGeocoding(lat: number, lng: number): Promise<string> {
+
+export async function getReverseGeocoding(
+  lat: number,
+  lng: number,
+): Promise<string> {
   try {
+    const apiKey = getApiKey();
+    if (!apiKey) return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-      {
-        headers: {
-          "User-Agent": "TaimStem-App/1.0",
-        },
-      }
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}&language=id`, // Added language=id for Indonesian localization
     );
     const data = await response.json();
-    return data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+    if (data.status !== "OK") {
+      console.error(
+        "Reverse Geocoding API error:",
+        data.status,
+        data.error_message,
+      );
+      return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    }
+
+    if (data.results && data.results.length > 0) {
+      // Find a result that is specific enough but not just an unnamed road.
+      // Usually the first result is the most precise (e.g. premise or street_address),
+      // but sometimes it's too specific (just a plus code).
+      // We'll iterate to find a good descriptive one.
+
+      let bestAddress = data.results[0].formatted_address;
+
+      for (const result of data.results) {
+        // Prefer a 'street_address', 'route', or 'premise' for accuracy
+        if (
+          result.types.includes("street_address") ||
+          result.types.includes("route") ||
+          result.types.includes("premise") ||
+          result.types.includes("administrative_area_level_4") // Kelurahan/Desa
+        ) {
+          bestAddress = result.formatted_address;
+          break;
+        }
+      }
+      return bestAddress;
+    }
+
+    return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
   } catch (error) {
     console.error("Error reverse geocoding:", error);
     return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;

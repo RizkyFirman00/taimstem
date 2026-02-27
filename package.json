@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@react-google-maps/api": "^2.20.8",
     "@react-leaflet/core": "^3.0.0",
     "@types/piexifjs": "^1.0.0",
     "clsx": "^2.1.1",

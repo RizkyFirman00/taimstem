@@ -2,141 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import piexif from "piexifjs";
 
-// Helper to convert lat/lon to tile coordinates (exact)
-function lon2tile(lon: number, zoom: number) {
-  return ((lon + 180) / 360) * Math.pow(2, zoom);
-}
-
-function lat2tile(lat: number, zoom: number) {
-  return (
-    ((1 -
-      Math.log(
-        Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180),
-      ) /
-        Math.PI) /
-      2) *
-    Math.pow(2, zoom)
-  );
-}
-
-// Helper to fetch a single raw tile
-async function fetchRawTile(
-  x: number,
-  y: number,
-  zoom: number,
-): Promise<Buffer> {
-  const providers = [
-    `https://tile.openstreetmap.de/${zoom}/${x}/${y}.png`, // OSM Germany (often reliable)
-    `https://a.tile.openstreetmap.org/${zoom}/${x}/${y}.png`, // OSM Standard A
-    `https://b.tile.openstreetmap.org/${zoom}/${x}/${y}.png`, // OSM Standard B
-    `https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/${zoom}/${x}/${y}.png`, // CartoDB
-  ];
-
-  for (const url of providers) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-      const res = await fetch(url, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        },
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeoutId));
-
-      if (!res.ok) continue;
-
-      const arrayBuffer = await res.arrayBuffer();
-      return Buffer.from(arrayBuffer);
-    } catch (e) {
-      // console.warn(`Failed to fetch tile from ${url}:`, e);
-      continue;
-    }
-  }
-
-  // Return transparent tile if failed
-  return await sharp({
-    create: {
-      width: 256,
-      height: 256,
-      channels: 4,
-      background: { r: 200, g: 200, b: 200, alpha: 255 },
-    },
-  })
-    .png()
-    .toBuffer();
-}
-
-async function getCenteredMap(
-  lat: number,
-  lng: number,
-  width: number,
-  height: number,
-): Promise<Buffer> {
-  const zoom = 17;
-  const tileSize = 256;
-
-  // Exact global pixel coordinates of the center point
-  const exactTileX = lon2tile(lng, zoom);
-  const exactTileY = lat2tile(lat, zoom);
-
-  const centerX = exactTileX * tileSize;
-  const centerY = exactTileY * tileSize;
-
-  // Calculate the bounds of the viewport in global pixels
-  const left = Math.floor(centerX - width / 2);
-  const top = Math.floor(centerY - height / 2);
-  const right = left + width;
-  const bottom = top + height;
-
-  // Determine which tiles cover this area
-  const minTx = Math.floor(left / tileSize);
-  const maxTx = Math.floor(right / tileSize);
-  const minTy = Math.floor(top / tileSize);
-  const maxTy = Math.floor(bottom / tileSize);
-
-  const totalCanvasW = (maxTx - minTx + 1) * tileSize;
-  const totalCanvasH = (maxTy - minTy + 1) * tileSize;
-
-  // Fetch all needed tiles
-  const compositeOps = [];
-
-  for (let tx = minTx; tx <= maxTx; tx++) {
-    for (let ty = minTy; ty <= maxTy; ty++) {
-      const tileBuffer = await fetchRawTile(tx, ty, zoom);
-      compositeOps.push({
-        input: tileBuffer,
-        top: (ty - minTy) * tileSize,
-        left: (tx - minTx) * tileSize,
-      });
-    }
-  }
-
-  // Composite full canvas
-  const fullCanvas = await sharp({
-    create: {
-      width: totalCanvasW,
-      height: totalCanvasH,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    },
-  })
-    .composite(compositeOps)
-    .png()
-    .toBuffer();
-
-  // Crop to the exact viewport
-  // Ensure crop coordinates are valid relative to the fullCanvas
-  // The (left, top) of fullCanvas in global pixels is (minTx * 256, minTy * 256)
-  const cropLeft = left - minTx * tileSize;
-  const cropTop = top - minTy * tileSize;
-
-  return await sharp(fullCanvas)
-    .extract({ left: cropLeft, top: cropTop, width: width, height: height })
-    .toBuffer();
-}
-
 export async function POST(req: NextRequest) {
   console.log("Processing started...");
   try {
@@ -268,30 +133,31 @@ export async function POST(req: NextRequest) {
     // Map size - make it match text height or slightly larger
     const mapSize = Math.floor(textBlockHeight * 1.2);
 
-    // Fetch Centered Map
-    console.log(`Fetching centered map for ${lat}, ${lng}...`);
-    const mapTileBuffer = await getCenteredMap(lat, lng, mapSize, mapSize);
+    // Fetch Google Static Map
+    console.log(`Fetching Google Static Map for ${lat}, ${lng}...`);
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      throw new Error("Google Maps API Key is not configured.");
+    }
+
+    const scale = mapSize > 500 ? 2 : 1;
+    // We request size/scale to fit mapSize
+    const reqSize = Math.floor(mapSize / scale);
+    const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=17&size=${reqSize}x${reqSize}&scale=${scale}&maptype=roadmap&markers=color:blue%7C${lat},${lng}&key=${apiKey}`;
+
+    const mapRes = await fetch(mapUrl);
+    if (!mapRes.ok) {
+      throw new Error(
+        `Failed to fetch Google Static Map: ${mapRes.statusText}`,
+      );
+    }
+    const mapTileBuffer = Buffer.from(await mapRes.arrayBuffer());
     console.log("Map fetched successfully.");
-
-    // Add Dot Marker to Map (Exactly Center)
-    const markerSize = 40;
-    const markerSvg = `<svg width="${markerSize}" height="${markerSize}"><circle cx="${markerSize / 2}" cy="${markerSize / 2}" r="${markerSize / 2 - 3}" fill="#3b82f6" stroke="white" stroke-width="4"/></svg>`;
-
-    const mapWithMarker = await sharp(mapTileBuffer)
-      .composite([
-        {
-          input: Buffer.from(markerSvg),
-          // Center of mapSize
-          top: Math.floor((mapSize - markerSize) / 2),
-          left: Math.floor((mapSize - markerSize) / 2),
-        },
-      ])
-      .toBuffer();
 
     // Map Border and Resize
     console.log("Compositing map border...");
 
-    const processedMap = await sharp(mapWithMarker)
+    const processedMap = await sharp(mapTileBuffer)
       .resize(mapSize, mapSize)
       .composite([
         {
@@ -351,20 +217,12 @@ export async function POST(req: NextRequest) {
     const textLeftPos =
       width - (overlayWidth - mapSize - 20) - Math.floor(width * 0.05);
 
-    // Attribution Watermark (Below Map)
-    const attrFontSize = Math.max(8, Math.floor(width * 0.009));
-    const attrSvg = `<svg width="${mapSize}" height="${attrFontSize * 3}">
-      <text x="50%" y="${Math.floor(attrFontSize * 1.5)}" font-family="sans-serif" font-size="${attrFontSize}" fill="rgba(255,255,255,0.7)" text-anchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">© OpenStreetMap contributors</text>
-    </svg>`;
-    const attrTopPos = topPos + mapSize + Math.floor(width * 0.005);
-
     console.log("Compositing final image...");
     const processedImageBuffer = await sharp(buffer)
       .rotate() // Auto-rotate here as well
       .composite([
         { input: processedMap, top: topPos, left: leftPosMap },
         { input: textBuffer, top: topPos, left: textLeftPos },
-        { input: Buffer.from(attrSvg), top: attrTopPos, left: leftPosMap },
       ])
       .withMetadata() // Keep original metadata
       .jpeg({ quality: 95 }) // Force JPEG

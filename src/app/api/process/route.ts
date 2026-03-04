@@ -145,7 +145,11 @@ export async function POST(req: NextRequest) {
     const reqSize = Math.floor(mapSize / scale);
     const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=17&size=${reqSize}x${reqSize}&scale=${scale}&maptype=roadmap&markers=color:blue%7C${lat},${lng}&key=${apiKey}`;
 
-    const mapRes = await fetch(mapUrl);
+    const mapRes = await fetch(mapUrl, {
+      headers: {
+        Referer: req.headers.get("referer") || req.nextUrl.origin,
+      },
+    });
     if (!mapRes.ok) {
       throw new Error(
         `Failed to fetch Google Static Map: ${mapRes.statusText}`,

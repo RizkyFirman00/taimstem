@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
           "X-Goog-Api-Key": apiKey,
           "X-Goog-FieldMask":
             "places.displayName,places.formattedAddress,places.location",
+          Referer: req.headers.get("referer") || req.nextUrl.origin,
         },
         body: JSON.stringify({
           textQuery: query,

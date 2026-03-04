@@ -46,9 +46,9 @@ export default function MapInner({
   useEffect(() => {
     if (map) {
       map.panTo({ lat: center[0], lng: center[1] });
-      map.setZoom(zoom);
+      // Removed map.setZoom(zoom) to prevent losing user-adjusted zoom level when placing a pin
     }
-  }, [center, zoom, map]);
+  }, [center, map]);
 
   if (!isLoaded) {
     return (

@@ -93,19 +93,48 @@ export async function getReverseGeocoding(
   lng: number,
 ): Promise<string> {
   try {
-    const apiKey = getApiKey();
-    if (!apiKey) return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    // Use the client-side Maps JS SDK if it's already loaded (handles HTTP referer restrictions automatically)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const win = window as any;
+    if (typeof window !== "undefined" && win.google && win.google.maps) {
+      return new Promise((resolve) => {
+        const geocoder = new win.google.maps.Geocoder();
+        geocoder.geocode(
+          { location: { lat, lng }, language: "id" },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (results: any[], status: string) => {
+            if (status === "OK" && results && results.length > 0) {
+              let bestAddress = results[0].formatted_address;
+              for (const result of results) {
+                if (
+                  result.types.includes("street_address") ||
+                  result.types.includes("route") ||
+                  result.types.includes("premise") ||
+                  result.types.includes("administrative_area_level_4")
+                ) {
+                  bestAddress = result.formatted_address;
+                  break;
+                }
+              }
+              resolve(bestAddress);
+            } else {
+              console.error("Client Geocoder failed:", status);
+              resolve(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+            }
+          },
+        );
+      });
+    }
 
-    const response = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}&language=id`, // Added language=id for Indonesian localization
-    );
+    // Fallback for SSR or if Maps SDK is not loaded
+    const response = await fetch(`/api/geocode?lat=${lat}&lng=${lng}`);
     const data = await response.json();
 
-    if (data.status !== "OK") {
+    if (data.status !== "OK" && !data.results) {
       console.error(
         "Reverse Geocoding API error:",
         data.status,
-        data.error_message,
+        data.error_message || data.error,
       );
       return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     }

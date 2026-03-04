@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import type { LocationData } from "@/lib/location";
 
 interface PhotoCardProps {
+  title?: string;
   file: File;
   previewUrl: string;
   location?: LocationData;
@@ -17,6 +18,7 @@ interface PhotoCardProps {
 }
 
 export function PhotoCard({
+  title,
   file,
   previewUrl,
   location,
@@ -42,7 +44,12 @@ export function PhotoCard({
   }, [timestamp]);
 
   return (
-    <div className={cn("glass overflow-hidden rounded-2xl relative group animate-in fade-in zoom-in-95 duration-300", className)}>
+    <div
+      className={cn(
+        "glass overflow-hidden rounded-2xl relative group animate-in fade-in zoom-in-95 duration-300",
+        className,
+      )}
+    >
       {/* Image Preview */}
       <div className="relative aspect-[4/3] w-full bg-slate-900 border-b border-white/5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -51,7 +58,14 @@ export function PhotoCard({
           alt={file.name}
           className="w-full h-full object-cover"
         />
-        
+
+        {/* Title Overlay */}
+        {title && (
+          <div className="absolute top-2 left-2 px-3 py-1.5 rounded-full bg-black/60 text-white/90 text-xs font-bold backdrop-blur-md shadow-sm border border-white/10">
+            {title}
+          </div>
+        )}
+
         {/* Remove Button */}
         <button
           onClick={(e) => {
@@ -80,7 +94,9 @@ export function PhotoCard({
             <MapPin size={18} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-slate-400 font-medium mb-0.5">Location</p>
+            <p className="text-xs text-slate-400 font-medium mb-0.5">
+              Location
+            </p>
             <p className="text-sm text-slate-200 truncate font-semibold">
               {location?.city || location?.address || "Set Location"}
             </p>
@@ -93,32 +109,43 @@ export function PhotoCard({
             <Calendar size={14} className="text-slate-400 shrink-0" />
             <input
               type="date"
-              value={timestamp ? `${timestamp.getFullYear()}-${String(timestamp.getMonth() + 1).padStart(2, '0')}-${String(timestamp.getDate()).padStart(2, '0')}` : ''}
+              value={
+                timestamp
+                  ? `${timestamp.getFullYear()}-${String(timestamp.getMonth() + 1).padStart(2, "0")}-${String(timestamp.getDate()).padStart(2, "0")}`
+                  : ""
+              }
               className="bg-transparent text-xs text-slate-300 w-full focus:outline-none cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full"
               onChange={(e) => {
                 if (e.target.value && timestamp) {
-                   const [y, m, d] = e.target.value.split('-').map(Number);
-                   const newDate = new Date(timestamp);
-                   newDate.setFullYear(y, m - 1, d);
-                   onDateTimeChange(newDate);
+                  const [y, m, d] = e.target.value.split("-").map(Number);
+                  const newDate = new Date(timestamp);
+                  newDate.setFullYear(y, m - 1, d);
+                  onDateTimeChange(newDate);
                 }
               }}
             />
           </div>
           <div className="flex-1 flex items-center gap-2 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors relative">
             <Clock size={14} className="text-slate-400 shrink-0" />
-             <input
+            <input
               type="time"
-              value={timestamp ? timestamp.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : ''}
+              value={
+                timestamp
+                  ? timestamp.toLocaleTimeString("en-GB", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : ""
+              }
               className="bg-transparent text-xs text-slate-300 w-full focus:outline-none cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full"
               onChange={(e) => {
-                 const [h, m] = e.target.value.split(':').map(Number);
-                 if (!isNaN(h) && timestamp) {
-                    const newDate = new Date(timestamp);
-                    newDate.setHours(h);
-                    newDate.setMinutes(m);
-                    onDateTimeChange(newDate);
-                 }
+                const [h, m] = e.target.value.split(":").map(Number);
+                if (!isNaN(h) && timestamp) {
+                  const newDate = new Date(timestamp);
+                  newDate.setHours(h);
+                  newDate.setMinutes(m);
+                  onDateTimeChange(newDate);
+                }
               }}
             />
           </div>

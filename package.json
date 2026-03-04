@@ -13,6 +13,7 @@
     "@react-leaflet/core": "^3.0.0",
     "@types/piexifjs": "^1.0.0",
     "clsx": "^2.1.1",
+    "exifreader": "^4.36.2",
     "heic2any": "^0.0.4",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.562.0",
